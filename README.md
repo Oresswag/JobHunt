@@ -69,6 +69,7 @@ Important values:
 - `PLAYWRIGHT_TEXT_TIMEOUT_MS`: content extraction timeout
 - `LLM_REQUEST_TIMEOUT_SECONDS`: timeout for the LLM call
 - `JOB_DELAY_SECONDS`: delay between processed links
+- `BROWSER_EXECUTABLE_PATH`: optional full path to the exact browser binary you want Playwright to use
 
 Common local LLM endpoints:
 
@@ -97,6 +98,8 @@ When Chromium opens:
 3. come back to the terminal and press Enter
 
 This saves the session into `chrome-profile/`.
+
+If the browser you launch from the desktop works but the Playwright-managed browser does not, set `BROWSER_EXECUTABLE_PATH` in `.env` to the exact browser binary you want the scripts to use.
 
 ## Manual smoke test
 

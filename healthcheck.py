@@ -67,6 +67,9 @@ def main() -> int:
         "config.chrome_profile_dir": check_path_exists(os.environ.get("CHROME_PROFILE_DIR", "chrome-profile")),
         "config.candidate_profile": check_path_exists(os.environ.get("CANDIDATE_PROFILE_PATH", "candidate_profile.md")),
     }
+    browser_path = os.environ.get("BROWSER_EXECUTABLE_PATH", "").strip()
+    if browser_path:
+        checks["config.browser_executable"] = check_path_exists(browser_path)
 
     llm_url = os.environ.get("LLM_API_URL", "").strip()
     model_name = os.environ.get("MODEL_NAME", "").strip()

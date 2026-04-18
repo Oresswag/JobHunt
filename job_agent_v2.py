@@ -11,12 +11,13 @@ import sqlite3
 import sys
 import time
 from contextlib import suppress
-from datetime import datetime
+from datetime import datetime, timezone
 from email.message import Message
 from functools import lru_cache
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Any, Callable, Optional, Sequence
+from urllib.parse import parse_qs, urlparse
 
 import markdown
 import pdfkit
@@ -51,6 +52,7 @@ PLAYWRIGHT_NAV_TIMEOUT_MS = int(env("PLAYWRIGHT_NAV_TIMEOUT_MS", "20000"))
 PLAYWRIGHT_TEXT_TIMEOUT_MS = int(env("PLAYWRIGHT_TEXT_TIMEOUT_MS", "8000"))
 LLM_REQUEST_TIMEOUT_SECONDS = int(env("LLM_REQUEST_TIMEOUT_SECONDS", "60"))
 JOB_DELAY_SECONDS = float(env("JOB_DELAY_SECONDS", "1.5"))
+BROWSER_EXECUTABLE_PATH = env("BROWSER_EXECUTABLE_PATH", "")
 
 
 # --- PATHS ---
@@ -191,7 +193,11 @@ def job_exists(url: str) -> bool:
 
 def log_job(url: str, title: str, score: int, status: str) -> None:
     """Insert or update a job row in SQLite."""
-    timestamp = datetime.utcnow().isoformat(timespec="seconds") + "Z"
+    timestamp = (
+        datetime.now(timezone.utc)
+        .isoformat(timespec="seconds")
+        .replace("+00:00", "Z")
+    )
     with sqlite3.connect(DB_PATH) as conn:
         conn.execute(
             """
@@ -269,11 +275,15 @@ def extract_job_playwright(url: str) -> Optional[str]:
     """Use Playwright with a persistent profile to extract JS-rendered text."""
     try:
         with sync_playwright() as playwright:
-            browser = playwright.chromium.launch_persistent_context(
-                user_data_dir=str(CHROME_PROFILE_DIR),
-                headless=True,
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
-            )
+            launch_options: dict[str, Any] = {
+                "user_data_dir": str(CHROME_PROFILE_DIR),
+                "headless": True,
+                "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+            }
+            if BROWSER_EXECUTABLE_PATH:
+                launch_options["executable_path"] = BROWSER_EXECUTABLE_PATH
+
+            browser = playwright.chromium.launch_persistent_context(**launch_options)
             try:
                 page = browser.pages[0] if browser.pages else browser.new_page()
                 retry(
@@ -483,6 +493,28 @@ def decode_text_part(part: Message) -> str:
         return payload.decode("utf-8", errors="replace")
 
 
+def is_indeed_job_link(url: str) -> bool:
+    parsed = urlparse(url)
+    hostname = (parsed.hostname or "").lower()
+    path = parsed.path.lower()
+    query = parse_qs(parsed.query)
+
+    if "indeed." not in hostname:
+        return False
+
+    if "jk" in query:
+        return True
+
+    job_paths = (
+        "/viewjob",
+        "/m/viewjob",
+        "/rc/clk",
+        "/pagead/clk",
+        "/applystart",
+    )
+    return any(path.startswith(job_path) for job_path in job_paths)
+
+
 def extract_links_from_message(msg: Message) -> list[str]:
     body_parts: list[str] = []
     html_parts: list[str] = []
@@ -515,6 +547,11 @@ def extract_links_from_message(msg: Message) -> list[str]:
             cleaned_links.append(cleaned)
 
     return cleaned_links
+
+
+def select_job_links(links: list[str]) -> list[str]:
+    job_links = [link for link in links if is_indeed_job_link(link)]
+    return list(dict.fromkeys(job_links))
 
 
 def fetch_job_emails() -> None:
@@ -565,8 +602,12 @@ def fetch_job_emails() -> None:
                     msg = email.message_from_bytes(response_part[1])
                     extracted_links.extend(extract_links_from_message(msg))
 
-        unique_links = list(dict.fromkeys(extracted_links))
-        logger.info("Found %s unique links to evaluate.", len(unique_links))
+        unique_links = select_job_links(extracted_links)
+        logger.info(
+            "Found %s links in unread Indeed emails, %s matched job-link filters.",
+            len(list(dict.fromkeys(extracted_links))),
+            len(unique_links),
+        )
 
         for url in unique_links:
             if job_exists(url):

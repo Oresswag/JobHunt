@@ -15,6 +15,7 @@ raw_profile_dir = Path(os.environ.get("CHROME_PROFILE_DIR", str(BASE_DIR / "chro
 CHROME_PROFILE_DIR = (
     raw_profile_dir if raw_profile_dir.is_absolute() else (BASE_DIR / raw_profile_dir).resolve()
 )
+BROWSER_EXECUTABLE_PATH = os.environ.get("BROWSER_EXECUTABLE_PATH", "").strip()
 START_URL = os.environ.get(
     "START_URL",
     "https://www.indeed.com/account/login",
@@ -30,11 +31,15 @@ def main() -> None:
     print("Log in manually, complete any CAPTCHA, then press Enter here to close.")
 
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch_persistent_context(
-            user_data_dir=str(CHROME_PROFILE_DIR),
-            headless=False,
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
-        )
+        launch_options = {
+            "user_data_dir": str(CHROME_PROFILE_DIR),
+            "headless": False,
+            "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+        }
+        if BROWSER_EXECUTABLE_PATH:
+            launch_options["executable_path"] = BROWSER_EXECUTABLE_PATH
+
+        browser = playwright.chromium.launch_persistent_context(**launch_options)
         page = browser.pages[0] if browser.pages else browser.new_page()
         page.goto(START_URL, wait_until="domcontentloaded", timeout=NAV_TIMEOUT_MS)
         input()
