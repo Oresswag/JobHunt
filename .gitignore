@@ -1,0 +1,12 @@
+cat > .gitignore <<'EOF'
+.env
+venv/
+__pycache__/
+*.pyc
+jobs.db
+queue/
+chrome-profile/
+job_agent.log
+.DS_Store
+EOF
+

@@ -1,0 +1,11 @@
+[Unit]
+Description=Run AI Job Agent every 30 minutes
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=30min
+Persistent=true
+Unit=job-agent.service
+
+[Install]
+WantedBy=timers.target

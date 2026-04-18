@@ -1,0 +1,11 @@
+[Unit]
+Description=AI Job Agent Execution Service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=__USER__
+WorkingDirectory=__APP_DIR__
+Environment=PYTHONUNBUFFERED=1
+ExecStart=__APP_DIR__/venv/bin/python __APP_DIR__/job_agent_v2.py
